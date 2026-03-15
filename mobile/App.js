@@ -16,17 +16,9 @@ import HomeScreen from "./src/screens/home/HomeScreen";
 import AnalyticsScreen from "./src/screens/analytics/AnalyticsScreen";
 import CoachChatScreen from "./src/screens/coach/CoachChatScreen";
 import ProfileScreen from "./src/screens/profile/ProfileScreen";
+import SocialScreen from "./src/screens/social/SocialScreen";
 
 const Tab = createBottomTabNavigator();
-
-// Social screen placeholder (no dedicated screen file yet)
-function SocialScreen() {
-  return (
-    <View style={s.placeholder}>
-      <Text style={s.placeholderText}>Social — Coming Soon</Text>
-    </View>
-  );
-}
 
 export default function App() {
   const [loading, setLoading] = useState(true);
@@ -137,16 +129,5 @@ const s = StyleSheet.create({
     backgroundColor: "#08070D",
     alignItems: "center",
     justifyContent: "center",
-  },
-  placeholder: {
-    flex: 1,
-    backgroundColor: "#08070D",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  placeholderText: {
-    fontSize: 18,
-    color: "#8E89A6",
-    fontWeight: "600",
   },
 });

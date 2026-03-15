@@ -78,13 +78,17 @@ async def create_completion(
     }
     if body.photo_url:
         insert_data["photo_url"] = body.photo_url
-        # TODO: trigger async photo verification
 
     completion_result = admin.table("habit_completions").insert(insert_data).execute()
     if not completion_result.data:
         raise HTTPException(500, "Failed to create completion")
 
     completion = completion_result.data[0]
+
+    # Async photo verification (fire-and-forget)
+    if body.photo_url:
+        import asyncio
+        asyncio.create_task(_verify_photo(completion["id"], body.photo_url, habit_result.data["name"]))
 
     # 4. Update habit stats (streak, best_streak, total_completions, rate)
     stats = await update_habit_stats(body.habit_id, user["id"])
@@ -253,3 +257,42 @@ def _update_daily_completion_stats(user_id: str, log_date: date):
         "habits_total": total_today,
         "completion_pct": round(pct, 3),
     }, on_conflict="user_id,log_date").execute()
+
+
+async def _verify_photo(completion_id: str, photo_url: str, habit_name: str):
+    """
+    Async photo verification using AI vision.
+    Checks if the uploaded photo is relevant to the habit.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    try:
+        from app.config import get_settings
+        settings = get_settings()
+
+        # Use Gemini vision (free) for photo verification
+        if settings.google_gemini_api_key:
+            import google.generativeai as genai
+            genai.configure(api_key=settings.google_gemini_api_key)
+            model = genai.GenerativeModel("gemini-2.0-flash")
+
+            response = model.generate_content([
+                f"Is this photo evidence of someone doing the habit '{habit_name}'? "
+                f"Reply with ONLY 'yes' or 'no'.",
+                {"mime_type": "image/jpeg", "data": photo_url},
+            ])
+            verified = "yes" in response.text.lower()
+        else:
+            # If no vision API, auto-approve
+            verified = True
+
+        admin = get_supabase_admin()
+        admin.table("habit_completions").update({
+            "photo_verified": verified,
+        }).eq("id", completion_id).execute()
+
+        logger.info(f"Photo verification for {completion_id}: {verified}")
+    except Exception as e:
+        logger.warning(f"Photo verification failed for {completion_id}: {e}")
+        # Don't fail the completion — just leave photo_verified as False

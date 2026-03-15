@@ -120,6 +120,7 @@ export const coachApi = {
   listApiKeys: () => apiFetch("/coach/api-keys"),
   deleteApiKey: (provider) => apiFetch(`/coach/api-keys/${provider}`, { method: "DELETE" }),
   setProviderPreference: (provider) => apiFetch("/coach/provider-preference", { method: "PUT", body: { preferred_ai_provider: provider } }),
+  getDailyInsight: () => apiFetch("/coach/daily-insight"),
 };
 
 // ─── Analytics API ───
@@ -138,6 +139,20 @@ export const socialApi = {
   acceptBuddy: (pairId) => apiFetch(`/social/buddies/${pairId}/accept`, { method: "POST" }),
   sendNudge: (data) => apiFetch("/social/nudges", { method: "POST", body: data }),
   listNudges: (unread = false) => apiFetch(`/social/nudges?unread=${unread}`),
+  listChallenges: (active = true) => apiFetch(`/social/challenges?active=${active}`),
+  myChallenges: () => apiFetch("/social/challenges/mine"),
+  getChallenge: (id) => apiFetch(`/social/challenges/${id}`),
+  joinChallenge: (id) => apiFetch(`/social/challenges/${id}/join`, { method: "POST" }),
+  leaveChallenge: (id) => apiFetch(`/social/challenges/${id}/leave`, { method: "POST" }),
+  createChallenge: (data) => apiFetch("/social/challenges", { method: "POST", body: data }),
+};
+
+// ─── Streak Freeze API ───
+export const streakFreezeApi = {
+  getStatus: () => apiFetch("/streak-freeze/status"),
+  purchase: () => apiFetch("/streak-freeze/purchase", { method: "POST" }),
+  activate: () => apiFetch("/streak-freeze/activate", { method: "POST" }),
+  getHistory: () => apiFetch("/streak-freeze/history"),
 };
 
 // ─── Gamification API ───

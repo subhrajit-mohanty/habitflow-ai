@@ -14,7 +14,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import Svg, { Circle, Defs, LinearGradient as SvgGrad, Stop } from "react-native-svg";
 import { COLORS } from "../../constants";
-import { habitsApi, completionsApi, dailyLogsApi, gamificationApi, userApi } from "../../services/api";
+import { habitsApi, completionsApi, dailyLogsApi, gamificationApi, userApi, coachApi } from "../../services/api";
+import FocusTimer from "../../components/FocusTimer";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const MOODS = ["😴", "😕", "😐", "🙂", "😄"];
@@ -26,13 +27,14 @@ export default function HomeScreen() {
   const [profile, setProfile] = useState(null);
   const [mood, setMood] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [insightIdx, setInsightIdx] = useState(0);
+  const [aiInsight, setAiInsight] = useState(null);
 
   // UI state
   const [celebration, setCelebration] = useState(null);
   const [streakMilestone, setStreakMilestone] = useState(null);
   const [undoTarget, setUndoTarget] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [timerHabit, setTimerHabit] = useState(null);
 
   // Animations
   const celebScale = useRef(new Animated.Value(0)).current;
@@ -51,17 +53,8 @@ export default function HomeScreen() {
   const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-  // AI Insights (rotate every 8s)
-  const insights = [
-    { icon: "🧠", text: "You complete 40% more habits on mornings you meditate first." },
-    { icon: "💡", text: "Your weakest habit dips mid-week. Try stacking it after your strongest one." },
-    { icon: "📊", text: "On 100% days your mood averages 4.5/5 vs 3.2 on skip days." },
-  ];
-
-  useEffect(() => {
-    const timer = setInterval(() => setInsightIdx((i) => (i + 1) % insights.length), 8000);
-    return () => clearInterval(timer);
-  }, []);
+  // Fallback insight when AI insight hasn't loaded yet
+  const fallbackInsight = "You complete 40% more habits on mornings you meditate first.";
 
   // ─── Load data ───
   useEffect(() => {
@@ -78,6 +71,11 @@ export default function HomeScreen() {
       setTodayHabits(habits || []);
       setLevelInfo(level || { current_level: 1, total_xp: 0, progress_pct: 0 });
       setProfile(prof);
+
+      // Fetch AI insight (non-blocking)
+      coachApi.getDailyInsight()
+        .then(res => setAiInsight(res?.insight))
+        .catch(() => {});
 
       // Animate ring
       Animated.spring(ringAnim, {
@@ -98,10 +96,30 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
-  // ─── Check-in ───
-  const handleCheckIn = async (habitStatus) => {
+  // ─── Check-in (entry point — may show Focus Timer for timed habits) ───
+  const handleCheckIn = (habitStatus) => {
     if (habitStatus.is_completed_today) return;
 
+    const habit = habitStatus.habit;
+
+    // Show Focus Timer for habits longer than 2 minutes
+    if (habit.duration_minutes > 2 || habit.verification_type === "timer") {
+      setTimerHabit(habit);
+      return;
+    }
+
+    doCheckIn(habitStatus);
+  };
+
+  // ─── Timer completion handler ───
+  const handleTimerComplete = async (habitId) => {
+    setTimerHabit(null);
+    const item = todayHabits.find((h) => h.habit.id === habitId);
+    if (item) doCheckIn(item);
+  };
+
+  // ─── Actual check-in API call ───
+  const doCheckIn = async (habitStatus) => {
     const habit = habitStatus.habit;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
@@ -238,8 +256,6 @@ export default function HomeScreen() {
     const timeB = b.scheduled_time || b.habit.preferred_time || "99:99";
     return timeA.localeCompare(timeB);
   });
-
-  const insight = insights[insightIdx];
 
   return (
     <View style={styles.container}>
@@ -416,19 +432,10 @@ export default function HomeScreen() {
         {/* ─── AI Insight ─── */}
         <View style={styles.insightCard}>
           <View style={styles.insightHeader}>
-            <Text style={{ fontSize: 16 }}>{insight.icon}</Text>
+            <Text style={{ fontSize: 16 }}>🧠</Text>
             <Text style={styles.insightLabel}>AI INSIGHT</Text>
-            <View style={{ flex: 1 }} />
-            <View style={styles.insightDots}>
-              {insights.map((_, i) => (
-                <View key={i} style={[
-                  styles.insightDot,
-                  i === insightIdx && styles.insightDotActive,
-                ]} />
-              ))}
-            </View>
           </View>
-          <Text style={styles.insightText}>{insight.text}</Text>
+          <Text style={styles.insightText}>{aiInsight || fallbackInsight}</Text>
         </View>
 
         {/* ─── Weekly Heatmap Mini ─── */}
@@ -509,6 +516,14 @@ export default function HomeScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* ─── Focus Timer ─── */}
+      <FocusTimer
+        visible={!!timerHabit}
+        habit={timerHabit}
+        onComplete={handleTimerComplete}
+        onClose={() => setTimerHabit(null)}
+      />
     </View>
   );
 }
@@ -631,9 +646,6 @@ const styles = StyleSheet.create({
   },
   insightHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
   insightLabel: { fontSize: 11, fontWeight: "700", color: COLORS.accent, letterSpacing: 1 },
-  insightDots: { flexDirection: "row", gap: 3 },
-  insightDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: `${COLORS.dim}44` },
-  insightDotActive: { backgroundColor: COLORS.accent },
   insightText: { fontSize: 13, color: COLORS.sub, lineHeight: 20 },
 
   // Heatmap

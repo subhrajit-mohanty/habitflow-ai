@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 import time
 
 from app.config import get_settings
-from app.routers import auth, users, habits, completions, daily_logs, coach, social, analytics, gamification, events, notifications
+from app.routers import auth, users, habits, completions, daily_logs, coach, social, analytics, gamification, events, notifications, streak_freeze
 
 
 # ============================================================
@@ -103,6 +103,7 @@ app.include_router(analytics.router, prefix=PREFIX)
 app.include_router(gamification.router, prefix=PREFIX)
 app.include_router(events.router, prefix=PREFIX)
 app.include_router(notifications.router, prefix=PREFIX)
+app.include_router(streak_freeze.router, prefix=PREFIX)
 
 
 # ============================================================

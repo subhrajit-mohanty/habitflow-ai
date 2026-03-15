@@ -369,3 +369,94 @@ async def set_provider_preference(
     }).eq("id", user["id"]).execute()
 
     return {"preferred_ai_provider": body.preferred_ai_provider}
+
+
+# ============================================================
+# DAILY INSIGHT
+# ============================================================
+
+@router.get("/daily-insight")
+async def get_daily_insight(
+    user: dict = Depends(get_current_user),
+    profile: dict = Depends(get_user_profile),
+):
+    """
+    Generate a short, personalized AI insight for the home screen.
+    Cached per day — only generates once, then returns cached version.
+    """
+    admin = get_supabase_admin()
+    from datetime import date, timedelta
+    today = date.today()
+
+    # Check cache (stored in daily_logs.ai_insight)
+    log = (
+        admin.table("daily_logs")
+        .select("id, ai_insight")
+        .eq("user_id", user["id"])
+        .eq("log_date", today.isoformat())
+        .execute()
+    )
+    if log.data and log.data[0].get("ai_insight"):
+        return {"insight": log.data[0]["ai_insight"], "cached": True}
+
+    # Gather quick stats
+    week_ago = (today - timedelta(days=7)).isoformat()
+    completions = (
+        admin.table("habit_completions")
+        .select("habit_id, completed_date, mood_score, completed_time")
+        .eq("user_id", user["id"])
+        .gte("completed_date", week_ago)
+        .execute()
+    ).data or []
+
+    habits = (
+        admin.table("habits")
+        .select("id, name, current_streak, completion_rate")
+        .eq("user_id", user["id"])
+        .eq("is_active", True)
+        .execute()
+    ).data or []
+
+    # Build data for AI
+    habit_summary = ", ".join([
+        f"{h['name']} (streak:{h.get('current_streak',0)}, rate:{round((h.get('completion_rate',0) or 0)*100)}%)"
+        for h in habits
+    ])
+
+    total_week = len(completions)
+    moods = [c["mood_score"] for c in completions if c.get("mood_score")]
+    avg_mood = round(sum(moods)/len(moods), 1) if moods else "unknown"
+
+    data_prompt = f"Habits: {habit_summary}. This week: {total_week} completions, avg mood: {avg_mood}/5."
+
+    from app.services.ai_coach import _resolve_provider, _call_provider
+    provider_info = _resolve_provider(user["id"], profile)
+
+    system = """You are a habit coach. Generate ONE short insight (max 100 characters) based on the user's data.
+Be specific and data-driven. Examples:
+- "You complete 40% more habits on mornings you meditate first."
+- "Your reading streak peaks on weekdays — try a weekend session!"
+- "Mood jumps to 4.2/5 on days you exercise. Keep it up!"
+Return ONLY the insight text, nothing else."""
+
+    try:
+        result = _call_provider(provider_info, system, [
+            {"role": "user", "content": data_prompt}
+        ], 100)
+        insight = result["content"].strip().strip('"')
+    except Exception:
+        # Fallback to a generic but data-informed insight
+        if habits:
+            best = max(habits, key=lambda h: h.get("current_streak", 0))
+            insight = f"Your {best['name']} streak is at {best.get('current_streak', 0)} days — keep it going!"
+        else:
+            insight = "Start your first habit today and build momentum!"
+
+    # Cache in daily_logs
+    admin.table("daily_logs").upsert({
+        "user_id": user["id"],
+        "log_date": today.isoformat(),
+        "ai_insight": insight,
+    }, on_conflict="user_id,log_date").execute()
+
+    return {"insight": insight, "cached": False}

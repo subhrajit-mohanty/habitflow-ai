@@ -111,10 +111,20 @@ app.include_router(notifications.router, prefix=PREFIX)
 
 @app.get("/health")
 async def health_check():
+    from app.database import get_supabase_admin
+    db_ok = True
+    try:
+        admin = get_supabase_admin()
+        admin.table("profiles").select("id", count="exact").limit(0).execute()
+    except Exception:
+        db_ok = False
+
+    health_status = "healthy" if db_ok else "degraded"
     return {
-        "status": "healthy",
+        "status": health_status,
         "app": settings.app_name,
         "version": settings.app_version,
+        "checks": {"database": "ok" if db_ok else "unreachable"},
     }
 
 

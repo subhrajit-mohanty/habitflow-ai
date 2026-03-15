@@ -112,7 +112,8 @@ export default function AnalyticsScreen() {
         <Text style={styles.chartTitle}>Mood & Energy</Text>
         <View style={styles.barChart}>
           {(moodTrend.length > 0 ? moodTrend.slice(-7) : Array(7).fill({ value: 0 })).map((m, i) => {
-            const energy = energyTrend[energyTrend.length - 7 + i]?.value || 0;
+            const energySlice = energyTrend.slice(-7);
+            const energy = (energySlice[i] || {}).value || 0;
             const moodVal = m.value || 0;
             return (
               <View key={i} style={styles.barCol}>

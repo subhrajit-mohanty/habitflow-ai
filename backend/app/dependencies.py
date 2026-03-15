@@ -44,10 +44,10 @@ async def get_current_user(
             "email": payload.get("email"),
             "role": payload.get("role", "authenticated"),
         }
-    except JWTError as e:
+    except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid or expired token: {str(e)}",
+            detail="Invalid or expired token",
         )
 
 

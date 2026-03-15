@@ -14,7 +14,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import Svg, { Circle, Defs, LinearGradient as SvgGrad, Stop } from "react-native-svg";
 import { COLORS } from "../../constants";
-import { habitsApi, completionsApi, dailyLogsApi, gamificationApi } from "../../services/api";
+import { habitsApi, completionsApi, dailyLogsApi, gamificationApi, userApi } from "../../services/api";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const MOODS = ["😴", "😕", "😐", "🙂", "😄"];
@@ -23,6 +23,7 @@ export default function HomeScreen() {
   // Data state
   const [todayHabits, setTodayHabits] = useState([]);
   const [levelInfo, setLevelInfo] = useState({ current_level: 1, total_xp: 0, progress_pct: 0 });
+  const [profile, setProfile] = useState(null);
   const [mood, setMood] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [insightIdx, setInsightIdx] = useState(0);
@@ -69,12 +70,14 @@ export default function HomeScreen() {
 
   const loadData = async () => {
     try {
-      const [habits, level] = await Promise.all([
+      const [habits, level, prof] = await Promise.all([
         habitsApi.getToday(),
         gamificationApi.getLevelInfo(),
+        userApi.getProfile(),
       ]);
       setTodayHabits(habits || []);
       setLevelInfo(level || { current_level: 1, total_xp: 0, progress_pct: 0 });
+      setProfile(prof);
 
       // Animate ring
       Animated.spring(ringAnim, {
@@ -261,7 +264,9 @@ export default function HomeScreen() {
               <Text style={styles.xpText}>{levelInfo.total_xp} XP</Text>
             </View>
             <LinearGradient colors={["#7C6BFF", "#00D9A6"]} style={styles.avatar}>
-              <Text style={styles.avatarText}>S</Text>
+              <Text style={styles.avatarText}>
+                {(profile?.display_name || profile?.username || "U").charAt(0).toUpperCase()}
+              </Text>
             </LinearGradient>
           </View>
         </View>

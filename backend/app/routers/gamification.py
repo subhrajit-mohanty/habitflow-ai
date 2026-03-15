@@ -3,6 +3,7 @@ HabitFlow AI — Gamification Routes
 Badges, leaderboard, level progression.
 """
 
+from datetime import date, timedelta
 from fastapi import APIRouter, Depends, Query
 from app.dependencies import get_current_user, get_user_profile
 from app.database import get_supabase_admin
@@ -67,8 +68,51 @@ async def get_leaderboard(
     limit: int = Query(20, ge=5, le=50),
     user: dict = Depends(get_current_user),
 ):
-    """XP leaderboard."""
+    """XP leaderboard, optionally filtered by period."""
     admin = get_supabase_admin()
+
+    # For weekly/monthly, rank by recent XP earned in completions
+    if period in ("weekly", "monthly"):
+        days = 7 if period == "weekly" else 30
+        since = (date.today() - timedelta(days=days)).isoformat()
+        comp_result = (
+            admin.table("habit_completions")
+            .select("user_id, xp_earned")
+            .gte("completed_date", since)
+            .execute()
+        )
+        user_xp: dict[str, int] = {}
+        for c in (comp_result.data or []):
+            uid = c["user_id"]
+            user_xp[uid] = user_xp.get(uid, 0) + (c.get("xp_earned") or 0)
+        top_users = sorted(user_xp.items(), key=lambda x: x[1], reverse=True)[:limit]
+
+        if not top_users:
+            return []
+
+        top_ids = [uid for uid, _ in top_users]
+        profiles_result = (
+            admin.table("profiles")
+            .select("id, username, display_name, avatar_url, total_xp, longest_streak")
+            .in_("id", top_ids)
+            .execute()
+        )
+        profile_map = {p["id"]: p for p in (profiles_result.data or [])}
+
+        return [
+            LeaderboardEntry(
+                rank=i + 1,
+                user_id=uid,
+                username=profile_map.get(uid, {}).get("username"),
+                display_name=profile_map.get(uid, {}).get("display_name"),
+                avatar_url=profile_map.get(uid, {}).get("avatar_url"),
+                total_xp=xp,
+                longest_streak=profile_map.get(uid, {}).get("longest_streak", 0),
+            )
+            for i, (uid, xp) in enumerate(top_users)
+        ]
+
+    # alltime — use total_xp directly
     result = (
         admin.table("profiles")
         .select("id, username, display_name, avatar_url, total_xp, longest_streak")

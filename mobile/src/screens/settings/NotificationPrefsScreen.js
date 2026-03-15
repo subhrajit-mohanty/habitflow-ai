@@ -12,8 +12,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { COLORS } from "../../constants";
 
-// API imports
-const API_BASE = "http://localhost:8000/v1";
+import { notificationsApi } from "../../services/api";
 
 const PREF_ITEMS = [
   {
@@ -80,27 +79,19 @@ export default function NotificationPrefsScreen() {
 
   const loadPrefs = async () => {
     try {
-      // In production: const data = await notificationsApi.getPreferences();
-      // Mock for now
-      setLoading(false);
+      const data = await notificationsApi.getPreferences();
+      if (data) setPrefs((p) => ({ ...p, ...data }));
     } catch (err) {
+      console.warn("Prefs load error:", err);
+    } finally {
       setLoading(false);
     }
   };
 
   const loadSchedule = async () => {
     try {
-      // In production: const data = await notificationsApi.getSchedule();
-      setSchedule({
-        notifications: [
-          { habit_icon: "🤸", habit_name: "Stretch", scheduled_time: "07:00", type: "habit_reminder" },
-          { habit_icon: "🧘", habit_name: "Meditate", scheduled_time: "07:30", type: "habit_reminder" },
-          { habit_icon: "💧", habit_name: "Drink Water", scheduled_time: "08:00", type: "habit_reminder" },
-          { habit_icon: "📖", habit_name: "Read 5 Pages", scheduled_time: "21:00", type: "habit_reminder" },
-          { habit_icon: "🙏", habit_name: "Gratitude Journal", scheduled_time: "22:00", type: "habit_reminder" },
-          { scheduled_time: "20:00", type: "streak_protector" },
-        ],
-      });
+      const data = await notificationsApi.getSchedule();
+      if (data) setSchedule(data);
     } catch (err) {
       console.warn("Schedule load error:", err);
     }
@@ -112,17 +103,22 @@ export default function NotificationPrefsScreen() {
     setPrefs((p) => ({ ...p, [key]: newVal }));
 
     try {
-      // In production: await notificationsApi.updatePreferences({ [key]: newVal });
+      await notificationsApi.updatePreferences({ [key]: newVal });
     } catch (err) {
       // Revert on error
       setPrefs((p) => ({ ...p, [key]: !newVal }));
+      Alert.alert("Error", "Failed to save preference. Please try again.");
     }
   };
 
-  const testNotification = (type) => {
+  const testNotification = async (type) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert("Test Sent!", `A test ${type} notification has been triggered. Check your notifications!`);
-    // In production: await notificationsApi.trigger(type);
+    try {
+      await notificationsApi.trigger(type);
+      Alert.alert("Test Sent!", `A test ${type} notification has been triggered.`);
+    } catch (err) {
+      Alert.alert("Error", "Failed to send test notification.");
+    }
   };
 
   if (loading) {

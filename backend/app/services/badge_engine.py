@@ -122,13 +122,23 @@ async def check_and_award_badges(user_id: str, habit_id: str, streak: int) -> li
                 "badge_id": badge["id"],
             }).execute()
 
-            # Award badge XP
+            # Award badge XP atomically
             xp_reward = badge.get("xp_reward", 0)
             if xp_reward > 0:
-                admin.rpc("increment_xp", {
-                    "p_user_id": user_id,
-                    "p_xp": xp_reward,
-                }).execute()
+                try:
+                    admin.rpc("increment_xp", {
+                        "p_user_id": user_id,
+                        "p_xp": xp_reward,
+                    }).execute()
+                except Exception:
+                    # Fallback: manual update if RPC not yet deployed
+                    profile_res = admin.table("profiles").select("total_xp, level").eq("id", user_id).single().execute()
+                    if profile_res.data:
+                        new_xp = profile_res.data["total_xp"] + xp_reward
+                        admin.table("profiles").update({
+                            "total_xp": new_xp,
+                            "level": (new_xp // 100) + 1,
+                        }).eq("id", user_id).execute()
 
             new_badges.append({
                 "id": badge["id"],

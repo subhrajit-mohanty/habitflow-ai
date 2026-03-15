@@ -3,9 +3,13 @@ HabitFlow AI — Auth Routes
 Wraps Supabase Auth for signup, login, OAuth, token refresh.
 """
 
-from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, EmailStr, Field
-from app.database import get_supabase_client
+import logging
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
+from app.database import get_supabase_client, get_supabase_admin
+from app.dependencies import get_current_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -50,19 +54,27 @@ async def signup(body: SignupRequest):
         if not result.user:
             raise HTTPException(400, "Signup failed")
 
-        # Create profile record
-        client.table("profiles").insert({
-            "id": result.user.id,
-            "username": body.email.split("@")[0],  # default username
-        }).execute()
+        # Create profile record using admin client to bypass RLS
+        admin = get_supabase_admin()
+        try:
+            admin.table("profiles").insert({
+                "id": result.user.id,
+                "username": body.email.split("@")[0],
+            }).execute()
+        except Exception as profile_err:
+            logger.error("Profile creation failed for user %s: %s", result.user.id, profile_err)
+            # Auth succeeded but profile failed — still return tokens
+            # so the user can retry profile creation on next login
 
         return AuthResponse(
             user_id=result.user.id,
             access_token=result.session.access_token,
             refresh_token=result.session.refresh_token,
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(400, f"Signup failed: {str(e)}")
+        raise HTTPException(400, "Signup failed")
 
 
 @router.post("/login", response_model=AuthResponse)
@@ -79,7 +91,7 @@ async def login(body: LoginRequest):
             access_token=result.session.access_token,
             refresh_token=result.session.refresh_token,
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(401, "Invalid email or password")
 
 
@@ -96,11 +108,13 @@ async def login_google(body: OAuthRequest):
             "provider": "google",
             "token": body.id_token,
         })
-        # Ensure profile exists
-        client.table("profiles").upsert({
+        # Ensure profile exists — safely access user_metadata
+        metadata = getattr(result.user, "user_metadata", None) or {}
+        admin = get_supabase_admin()
+        admin.table("profiles").upsert({
             "id": result.user.id,
-            "display_name": result.user.user_metadata.get("full_name"),
-            "avatar_url": result.user.user_metadata.get("avatar_url"),
+            "display_name": metadata.get("full_name"),
+            "avatar_url": metadata.get("avatar_url"),
         }).execute()
 
         return AuthResponse(
@@ -108,8 +122,8 @@ async def login_google(body: OAuthRequest):
             access_token=result.session.access_token,
             refresh_token=result.session.refresh_token,
         )
-    except Exception as e:
-        raise HTTPException(401, f"Google login failed: {str(e)}")
+    except Exception:
+        raise HTTPException(401, "Google login failed")
 
 
 @router.post("/login/apple", response_model=AuthResponse)
@@ -121,7 +135,8 @@ async def login_apple(body: OAuthRequest):
             "provider": "apple",
             "token": body.id_token,
         })
-        client.table("profiles").upsert({
+        admin = get_supabase_admin()
+        admin.table("profiles").upsert({
             "id": result.user.id,
         }).execute()
 
@@ -130,8 +145,8 @@ async def login_apple(body: OAuthRequest):
             access_token=result.session.access_token,
             refresh_token=result.session.refresh_token,
         )
-    except Exception as e:
-        raise HTTPException(401, f"Apple login failed: {str(e)}")
+    except Exception:
+        raise HTTPException(401, "Apple login failed")
 
 
 # ============================================================
@@ -149,7 +164,7 @@ async def refresh_token(body: RefreshRequest):
             access_token=result.session.access_token,
             refresh_token=result.session.refresh_token,
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(401, "Invalid refresh token")
 
 
@@ -173,15 +188,21 @@ async def forgot_password(body: dict):
     client = get_supabase_client()
     try:
         client.auth.reset_password_email(email)
-        return {"message": "Password reset email sent"}
-    except Exception as e:
-        # Don't reveal if email exists
-        return {"message": "If the email exists, a reset link has been sent"}
+    except Exception:
+        pass  # Don't reveal if email exists
+    return {"message": "If the email exists, a reset link has been sent"}
 
 
 @router.delete("/account", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_account():
+async def delete_account(user: dict = Depends(get_current_user)):
     """GDPR-compliant account deletion. Cascades via FK constraints."""
-    # In production, this would be handled via Supabase Admin API
-    # with proper authorization checks
-    raise HTTPException(501, "Account deletion requires admin verification. Contact support.")
+    admin = get_supabase_admin()
+    try:
+        # Delete profile (cascades to all user data via FK constraints)
+        admin.table("profiles").delete().eq("id", user["id"]).execute()
+        # Delete auth user via Supabase Admin API
+        admin.auth.admin.delete_user(user["id"])
+    except Exception as e:
+        logger.error("Account deletion failed for user %s: %s", user["id"], e)
+        raise HTTPException(500, "Account deletion failed. Please contact support.")
+    return None

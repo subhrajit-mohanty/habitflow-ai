@@ -3,10 +3,13 @@ HabitFlow AI — Behavior Event Routes
 Fire-and-forget events for ML model training.
 """
 
+import logging
 from fastapi import APIRouter, Depends, status
 from app.dependencies import get_current_user
 from app.database import get_supabase_admin
 from app.models.schemas import BehaviorEventCreate
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/events", tags=["Events"])
 
@@ -26,6 +29,6 @@ async def track_event(
             "local_time": body.local_time,
             "day_of_week": body.day_of_week,
         }).execute()
-    except Exception:
-        pass  # Best effort — don't fail the request
+    except Exception as e:
+        logger.warning("Event tracking failed: %s", e)
     return {"accepted": True}

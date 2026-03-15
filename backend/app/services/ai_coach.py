@@ -161,13 +161,11 @@ async def chat(
         "model": settings.ai_model,
     }).execute()
 
-    # Update conversation token count
-    admin.table("coach_conversations").update({
-        "total_tokens": admin.rpc("increment_tokens", {
-            "p_conv_id": conversation_id,
-            "p_tokens": tokens_used,
-        }).execute() if False else tokens_used,
-    }).eq("id", conversation_id).execute()
+    # Atomically increment conversation token count
+    admin.rpc("increment_tokens", {
+        "p_conv_id": conversation_id,
+        "p_tokens": tokens_used,
+    }).execute()
 
     return {
         "conversation_id": conversation_id,

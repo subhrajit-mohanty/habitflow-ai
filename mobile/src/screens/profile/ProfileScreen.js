@@ -12,12 +12,13 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { COLORS } from "../../constants";
-import { userApi, gamificationApi, auth } from "../../services/api";
+import { userApi, gamificationApi, habitsApi, auth } from "../../services/api";
 
 export default function ProfileScreen() {
   const [profile, setProfile] = useState(null);
   const [levelInfo, setLevelInfo] = useState(null);
   const [badges, setBadges] = useState([]);
+  const [activeHabitCount, setActiveHabitCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [badgeFilter, setBadgeFilter] = useState("all");
@@ -27,16 +28,19 @@ export default function ProfileScreen() {
 
   const loadData = async () => {
     try {
-      const [prof, level, badgeList] = await Promise.all([
+      const [prof, level, badgeList, habits] = await Promise.all([
         userApi.getProfile(),
         gamificationApi.getLevelInfo(),
         gamificationApi.getBadges(),
+        habitsApi.list("active=true"),
       ]);
       setProfile(prof);
       setLevelInfo(level);
       setBadges(badgeList || []);
+      setActiveHabitCount(Array.isArray(habits) ? habits.length : 0);
     } catch (err) {
       console.error("Profile load error:", err);
+      Alert.alert("Error", "Failed to load profile data. Pull to refresh.");
     } finally {
       setLoading(false);
     }
@@ -145,7 +149,7 @@ export default function ProfileScreen() {
       {/* ─── Stats Row ─── */}
       <View style={styles.statsRow}>
         {[
-          { label: "Active Habits", val: "5", icon: "🎯" },
+          { label: "Active Habits", val: `${activeHabitCount}`, icon: "🎯" },
           { label: "Best Streak", val: `${profile?.longest_streak || 0}`, icon: "🔥" },
           { label: "Badges", val: `${earnedCount}/${badges.length}`, icon: "🏅" },
         ].map((s, i) => (

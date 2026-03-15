@@ -142,6 +142,14 @@ export const gamificationApi = {
   getLevelInfo: () => apiFetch("/gamification/level-info"),
 };
 
+// ─── Notifications API ───
+export const notificationsApi = {
+  getPreferences: () => apiFetch("/notifications/preferences"),
+  updatePreferences: (data) => apiFetch("/notifications/preferences", { method: "PATCH", body: data }),
+  getSchedule: () => apiFetch("/notifications/schedule"),
+  trigger: (type) => apiFetch("/notifications/test", { method: "POST", body: { type } }),
+};
+
 // ─── Events API ───
 export const eventsApi = {
   track: (eventType, eventData = {}) => {

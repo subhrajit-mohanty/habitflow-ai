@@ -8,12 +8,16 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, FlatList,
   StyleSheet, Animated, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Keyboard, Dimensions,
+  ActivityIndicator, Keyboard, Dimensions, Alert,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { COLORS } from "../../constants";
 import { coachApi, habitsApi, dailyLogsApi, gamificationApi } from "../../services/api";
+
+const CONVERSATION_KEY = "habitflow_coach_conversation_id";
+const FREE_MSG_LIMIT = 10;
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
@@ -52,9 +56,15 @@ export default function CoachChatScreen() {
     new Animated.Value(0),
   ]).current;
 
-  // ─── Load user context on mount ───
+  // ─── Load persisted conversation and user context on mount ───
   useEffect(() => {
-    loadUserContext();
+    (async () => {
+      try {
+        const savedConvId = await AsyncStorage.getItem(CONVERSATION_KEY);
+        if (savedConvId) setConversationId(savedConvId);
+      } catch {}
+      loadUserContext();
+    })();
   }, []);
 
   const loadUserContext = async () => {
@@ -148,6 +158,7 @@ export default function CoachChatScreen() {
 
       if (!conversationId) {
         setConversationId(response.conversation_id);
+        AsyncStorage.setItem(CONVERSATION_KEY, response.conversation_id).catch(() => {});
       }
 
       const aiMsg = {
@@ -401,7 +412,7 @@ export default function CoachChatScreen() {
 
         {/* Free tier notice */}
         <View style={styles.tierNotice}>
-          <Text style={styles.tierText}>{3 - msgCount} of 3 free messages left</Text>
+          <Text style={styles.tierText}>{Math.max(FREE_MSG_LIMIT - msgCount, 0)} of {FREE_MSG_LIMIT} free messages left</Text>
           <TouchableOpacity style={styles.tierUpgrade}>
             <Text style={styles.tierUpgradeText}>Upgrade</Text>
           </TouchableOpacity>

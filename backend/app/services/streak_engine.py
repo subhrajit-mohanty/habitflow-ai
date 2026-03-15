@@ -28,11 +28,19 @@ async def calculate_streak(habit_id: str) -> int:
         else:
             break
 
-    # Update the habit record
+    # Update the habit record; fetch current best_streak to compute new best
+    habit_result = (
+        admin.table("habits")
+        .select("best_streak")
+        .eq("id", habit_id)
+        .single()
+        .execute()
+    )
+    best_streak = max(streak, (habit_result.data or {}).get("best_streak", 0))
+
     admin.table("habits").update({
         "current_streak": streak,
-        "best_streak": admin.rpc("greatest_val", {"a": streak, "b": 0}).execute()
-        if False else streak,  # We'll handle best_streak separately
+        "best_streak": best_streak,
     }).eq("id", habit_id).execute()
 
     return streak

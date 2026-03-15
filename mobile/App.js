@@ -11,23 +11,21 @@ import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import { supabase, userApi } from "./src/services/api";
 import OnboardingNavigator from "./src/screens/onboarding/OnboardingNavigator";
 
+// Import actual screen components
+import HomeScreen from "./src/screens/home/HomeScreen";
+import AnalyticsScreen from "./src/screens/analytics/AnalyticsScreen";
+import CoachChatScreen from "./src/screens/coach/CoachChatScreen";
+import ProfileScreen from "./src/screens/profile/ProfileScreen";
+
 const Tab = createBottomTabNavigator();
 
-// Placeholder screens (to be built next)
-function HomeScreen() {
-  return <View style={s.placeholder}><Text style={s.placeholderText}>🏠 Home — Coming next!</Text></View>;
-}
-function AnalyticsScreen() {
-  return <View style={s.placeholder}><Text style={s.placeholderText}>📊 Analytics</Text></View>;
-}
-function CoachScreen() {
-  return <View style={s.placeholder}><Text style={s.placeholderText}>💬 AI Coach</Text></View>;
-}
+// Social screen placeholder (no dedicated screen file yet)
 function SocialScreen() {
-  return <View style={s.placeholder}><Text style={s.placeholderText}>👥 Social</Text></View>;
-}
-function ProfileScreen() {
-  return <View style={s.placeholder}><Text style={s.placeholderText}>⚙️ Profile</Text></View>;
+  return (
+    <View style={s.placeholder}>
+      <Text style={s.placeholderText}>Social — Coming Soon</Text>
+    </View>
+  );
 }
 
 export default function App() {
@@ -73,7 +71,6 @@ export default function App() {
   }
 
   // Not logged in — show onboarding (which includes signup)
-  // For MVP, we skip auth screens and go straight to onboarding
   if (!session || !onboardingDone) {
     return (
       <View style={{ flex: 1, backgroundColor: "#08070D" }}>
@@ -115,7 +112,7 @@ export default function App() {
         />
         <Tab.Screen
           name="Coach"
-          component={CoachScreen}
+          component={CoachChatScreen}
           options={{ tabBarLabel: "Coach", tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>◉</Text> }}
         />
         <Tab.Screen

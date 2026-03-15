@@ -5,7 +5,7 @@ Buddies, nudges, challenges.
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import Optional
-from app.dependencies import get_current_user, require_pro
+from app.dependencies import get_current_user
 from app.database import get_supabase_admin
 from app.models.schemas import (
     BuddyInviteRequest, BuddyPairResponse,

@@ -1,5 +1,5 @@
 """
-HabitFlow AI — Dependencies (Auth, Rate Limiting, Subscription Guards)
+HabitFlow AI — Dependencies (Auth, Profile)
 """
 
 from fastapi import Depends, HTTPException, Header, status
@@ -66,13 +66,13 @@ async def get_auth_client(
 
 
 # ============================================================
-# Subscription Guard
+# User Profile
 # ============================================================
 
 async def get_user_profile(
     user: dict = Depends(get_current_user),
 ) -> dict:
-    """Fetch the full profile with subscription info."""
+    """Fetch the full user profile."""
     admin = get_supabase_admin()
     result = admin.table("profiles").select("*").eq("id", user["id"]).single().execute()
     if not result.data:
@@ -80,42 +80,3 @@ async def get_user_profile(
     return result.data
 
 
-def require_pro(profile: dict = Depends(get_user_profile)) -> dict:
-    """Guard: requires Pro or Lifetime subscription."""
-    if profile.get("subscription_tier") not in ("pro", "lifetime"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="This feature requires a Pro subscription",
-        )
-    return profile
-
-
-# ============================================================
-# Habit Limit Check
-# ============================================================
-
-async def check_habit_limit(
-    profile: dict = Depends(get_user_profile),
-    settings: Settings = Depends(get_settings),
-):
-    """Check if user can create more habits based on subscription tier."""
-    tier = profile.get("subscription_tier", "free")
-    max_habits = settings.free_max_habits if tier == "free" else settings.pro_max_habits
-
-    admin = get_supabase_admin()
-    result = (
-        admin.table("habits")
-        .select("id", count="exact")
-        .eq("user_id", profile["id"])
-        .eq("is_active", True)
-        .eq("is_archived", False)
-        .execute()
-    )
-    current_count = result.count or 0
-
-    if current_count >= max_habits:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Habit limit reached ({max_habits}). Upgrade to Pro for unlimited habits.",
-        )
-    return profile

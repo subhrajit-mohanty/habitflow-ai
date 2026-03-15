@@ -17,7 +17,6 @@ import { COLORS } from "../../constants";
 import { coachApi, habitsApi, dailyLogsApi, gamificationApi } from "../../services/api";
 
 const CONVERSATION_KEY = "habitflow_coach_conversation_id";
-const FREE_MSG_LIMIT = 10;
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
@@ -45,7 +44,6 @@ export default function CoachChatScreen() {
   const [userContext, setUserContext] = useState(null);
   const [isLoadingContext, setIsLoadingContext] = useState(true);
   const [error, setError] = useState(null);
-  const [msgCount, setMsgCount] = useState(0);
 
   // Refs
   const flatListRef = useRef(null);
@@ -170,20 +168,9 @@ export default function CoachChatScreen() {
       };
 
       setMessages((prev) => [...prev, aiMsg]);
-      setMsgCount((c) => c + 1);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
       setError(err.message);
-      // If rate limited, show upgrade prompt
-      if (err.message.includes("Free tier limit") || err.message.includes("403")) {
-        const limitMsg = {
-          id: `limit-${Date.now()}`,
-          role: "system",
-          content: "You've reached your free weekly limit. Upgrade to Pro for unlimited AI coaching! 🚀",
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, limitMsg]);
-      }
     } finally {
       setIsTyping(false);
     }
@@ -202,22 +189,6 @@ export default function CoachChatScreen() {
 
   // ─── Render message bubble ───
   const renderMessage = ({ item: msg }) => {
-    if (msg.role === "system") {
-      return (
-        <View style={styles.systemMsgContainer}>
-          <LinearGradient
-            colors={[`${COLORS.accent}15`, `${COLORS.mint}10`]}
-            style={styles.systemBubble}
-          >
-            <Text style={styles.systemText}>{msg.content}</Text>
-            <TouchableOpacity style={styles.upgradeBtn}>
-              <Text style={styles.upgradeBtnText}>Upgrade to Pro</Text>
-            </TouchableOpacity>
-          </LinearGradient>
-        </View>
-      );
-    }
-
     const isUser = msg.role === "user";
     return (
       <View style={[styles.msgRow, isUser && styles.msgRowUser]}>
@@ -410,13 +381,6 @@ export default function CoachChatScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Free tier notice */}
-        <View style={styles.tierNotice}>
-          <Text style={styles.tierText}>{Math.max(FREE_MSG_LIMIT - msgCount, 0)} of {FREE_MSG_LIMIT} free messages left</Text>
-          <TouchableOpacity style={styles.tierUpgrade}>
-            <Text style={styles.tierUpgradeText}>Upgrade</Text>
-          </TouchableOpacity>
-        </View>
       </View>
     </KeyboardAvoidingView>
   );
@@ -580,34 +544,6 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.5)",
   },
 
-  // System message
-  systemMsgContainer: {
-    alignItems: "center",
-    marginVertical: 8,
-    paddingHorizontal: 18,
-  },
-  systemBubble: {
-    borderRadius: 16,
-    padding: 16,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: `${COLORS.accent}20`,
-  },
-  systemText: {
-    fontSize: 13,
-    color: COLORS.sub,
-    textAlign: "center",
-    lineHeight: 20,
-    marginBottom: 10,
-  },
-  upgradeBtn: {
-    backgroundColor: COLORS.accent,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  upgradeBtnText: { color: "#fff", fontSize: 13, fontWeight: "700" },
-
   // Typing
   typingBubble: { paddingVertical: 16, paddingHorizontal: 20 },
   typingDots: { flexDirection: "row", gap: 4 },
@@ -682,20 +618,4 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
 
-  // Tier notice
-  tierNotice: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 8,
-  },
-  tierText: { fontSize: 10, color: COLORS.dim },
-  tierUpgrade: {
-    backgroundColor: `${COLORS.accent}15`,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  tierUpgradeText: { fontSize: 9, fontWeight: "700", color: COLORS.accent },
 });

@@ -82,23 +82,14 @@ def _call_anthropic(system_prompt: str, messages: list[dict], max_tokens: int, m
 
 def _resolve_provider(user_id: str, profile: dict) -> dict:
     """
-    Determine which AI provider to use based on user tier and settings.
+    Determine which AI provider to use based on user preference.
     Returns: {"provider": str, "model": str, "api_key": str | None}
     """
     settings = get_settings()
     admin = get_supabase_admin()
-    tier = profile.get("subscription_tier", "free")
     preferred = profile.get("preferred_ai_provider", "gemini")
 
-    # Pro/lifetime users → app's Claude key
-    if tier in ("pro", "lifetime"):
-        return {
-            "provider": "anthropic",
-            "model": settings.ai_model,
-            "api_key": settings.anthropic_api_key,
-        }
-
-    # Check if user has their own API key (BYOK)
+    # Check if user has their own API key (BYOK) and prefers Claude
     if preferred == "anthropic":
         key_result = (
             admin.table("user_api_keys")
@@ -116,7 +107,7 @@ def _resolve_provider(user_id: str, profile: dict) -> dict:
                 "api_key": key_result.data[0]["api_key_encrypted"],
             }
 
-    # Default: free Gemini
+    # Default: free Gemini (unlimited for all users)
     return {
         "provider": "gemini",
         "model": settings.free_ai_model,
@@ -237,7 +228,7 @@ async def chat(
     if profile is None:
         profile = (
             admin.table("profiles")
-            .select("subscription_tier, preferred_ai_provider")
+            .select("preferred_ai_provider")
             .eq("id", user_id)
             .single()
             .execute()
@@ -333,7 +324,7 @@ async def generate_weekly_summary(user_id: str, profile: dict = None) -> dict:
     if profile is None:
         profile = (
             admin.table("profiles")
-            .select("subscription_tier, preferred_ai_provider")
+            .select("preferred_ai_provider")
             .eq("id", user_id)
             .single()
             .execute()

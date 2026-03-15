@@ -43,14 +43,8 @@ class Settings(BaseSettings):
     max_upload_size_mb: int = 10
 
     # Rate Limits
-    free_rate_limit: int = 60  # req/min
-    pro_rate_limit: int = 120
-    ai_rate_limit: int = 10
-    free_ai_messages_per_week: int = 3
-
-    # Subscription Limits
-    free_max_habits: int = 3
-    pro_max_habits: int = 50
+    rate_limit: int = 120  # req/min
+    ai_rate_limit: int = 30
 
     # XP Configuration
     xp_per_completion: int = 10

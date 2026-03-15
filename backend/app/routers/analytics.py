@@ -5,7 +5,7 @@ Overview stats, per-habit analytics, mood-habit correlations, trends.
 
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
-from app.dependencies import get_current_user, require_pro
+from app.dependencies import get_current_user, get_user_profile
 from app.database import get_supabase_admin
 from app.models.schemas import OverallAnalytics, HabitAnalytics
 
@@ -185,9 +185,9 @@ async def get_habit_analytics(
 @router.get("/mood-correlations")
 async def get_mood_correlations(
     period: int = Query(30, ge=7, le=365),
-    profile: dict = Depends(require_pro),  # Pro-only feature
+    profile: dict = Depends(get_user_profile),
 ):
-    """Show which habits have the strongest mood/energy correlation. PRO ONLY."""
+    """Show which habits have the strongest mood/energy correlation."""
     admin = get_supabase_admin()
     start_date = (date.today() - timedelta(days=period)).isoformat()
     user_id = profile["id"]
@@ -254,9 +254,9 @@ async def get_mood_correlations(
 
 @router.get("/best-times")
 async def get_best_times(
-    profile: dict = Depends(require_pro),  # Pro-only
+    profile: dict = Depends(get_user_profile),
 ):
-    """AI-computed optimal times per habit. PRO ONLY."""
+    """AI-computed optimal times per habit."""
     admin = get_supabase_admin()
 
     habits = (

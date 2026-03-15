@@ -152,7 +152,6 @@ export default function ProfileScreen() {
 
   const settingItems = [
     { label: "Notification Preferences", icon: "🔔", onPress: () => {} },
-    { label: `Subscription · ${(profile?.subscription_tier || "free").charAt(0).toUpperCase() + (profile?.subscription_tier || "free").slice(1)}`, icon: "💎", accent: true, onPress: () => {} },
     { label: "Export My Data", icon: "📤", onPress: () => {} },
     { label: "Dark Mode", icon: "🌙", toggle: true, value: darkMode, onToggle: setDarkMode },
     { label: "Help & Feedback", icon: "💬", onPress: () => {} },

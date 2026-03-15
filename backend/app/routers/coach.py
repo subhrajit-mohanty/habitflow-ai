@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from app.dependencies import get_current_user, get_user_profile
 from app.database import get_supabase_admin
-from app.config import get_settings
 from app.models.schemas import (
     CoachChatRequest, CoachMessageResponse,
     CoachConversationResponse, WeeklySummaryResponse,
@@ -50,57 +49,9 @@ async def chat_with_coach(
 ):
     """
     Chat with the AI habit coach.
-    - Free tier (Gemini): unlimited messages
-    - BYOK (user's own key): unlimited messages
-    - Pro (app's Claude key): unlimited messages
-    Rate limit only applies to free users using the app's Claude key (legacy).
+    All users get unlimited messages via Gemini (free).
+    Users can optionally bring their own Anthropic key for Claude.
     """
-    settings = get_settings()
-    admin = get_supabase_admin()
-    tier = profile.get("subscription_tier", "free")
-    preferred = profile.get("preferred_ai_provider", "gemini")
-
-    # Rate limit only if free user WITHOUT their own key and NOT using Gemini
-    # (This is a safety net — _resolve_provider would route them to Gemini anyway)
-    if tier == "free" and preferred == "anthropic":
-        # Check if they have a valid BYOK key
-        byok = (
-            admin.table("user_api_keys")
-            .select("id")
-            .eq("user_id", user["id"])
-            .eq("provider", "anthropic")
-            .eq("is_valid", True)
-            .limit(1)
-            .execute()
-        )
-        if not byok.data:
-            # No BYOK key — they'll use Gemini, which is free and unlimited
-            # But if somehow Gemini is not configured, apply rate limit
-            if not settings.google_gemini_api_key:
-                from datetime import date, timedelta
-                week_start = (date.today() - timedelta(days=date.today().weekday())).isoformat()
-                msg_count = (
-                    admin.table("coach_messages")
-                    .select("id", count="exact")
-                    .eq("role", "user")
-                    .gte("created_at", week_start)
-                    .in_(
-                        "conversation_id",
-                        [c["id"] for c in (
-                            admin.table("coach_conversations")
-                            .select("id")
-                            .eq("user_id", user["id"])
-                            .execute()
-                        ).data or []]
-                    )
-                    .execute()
-                )
-                if (msg_count.count or 0) >= settings.free_ai_messages_per_week:
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail=f"Free tier limit: {settings.free_ai_messages_per_week} AI messages/week. Add your own API key or upgrade to Pro for unlimited.",
-                    )
-
     try:
         result = await ai_chat(
             user_id=user["id"],
@@ -340,29 +291,19 @@ async def set_provider_preference(
 
     admin = get_supabase_admin()
 
-    # If switching to anthropic, verify they have a valid key or are pro
+    # If switching to anthropic, verify they have a valid BYOK key
     if body.preferred_ai_provider == "anthropic":
-        profile = (
-            admin.table("profiles")
-            .select("subscription_tier")
-            .eq("id", user["id"])
-            .single()
+        key = (
+            admin.table("user_api_keys")
+            .select("id")
+            .eq("user_id", user["id"])
+            .eq("provider", "anthropic")
+            .eq("is_valid", True)
+            .limit(1)
             .execute()
-        ).data
-        tier = profile.get("subscription_tier", "free")
-
-        if tier not in ("pro", "lifetime"):
-            key = (
-                admin.table("user_api_keys")
-                .select("id")
-                .eq("user_id", user["id"])
-                .eq("provider", "anthropic")
-                .eq("is_valid", True)
-                .limit(1)
-                .execute()
-            )
-            if not key.data:
-                raise HTTPException(400, "Add your Anthropic API key first, or upgrade to Pro.")
+        )
+        if not key.data:
+            raise HTTPException(400, "Add your Anthropic API key first to use Claude.")
 
     admin.table("profiles").update({
         "preferred_ai_provider": body.preferred_ai_provider,

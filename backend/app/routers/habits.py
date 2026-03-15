@@ -6,7 +6,7 @@ CRUD, today's view, templates, calendar heatmap, reorder.
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import Optional
-from app.dependencies import get_current_user, check_habit_limit
+from app.dependencies import get_current_user, get_user_profile
 from app.database import get_supabase_admin
 from app.models.habit import (
     HabitCreate, HabitUpdate, HabitResponse,
@@ -127,9 +127,9 @@ async def get_habit_templates():
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=HabitResponse)
 async def create_habit(
     body: HabitCreate,
-    profile: dict = Depends(check_habit_limit),
+    profile: dict = Depends(get_user_profile),
 ):
-    """Create a new habit. Checks subscription limits."""
+    """Create a new habit."""
     admin = get_supabase_admin()
 
     # Get current max sort_order

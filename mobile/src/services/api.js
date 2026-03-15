@@ -115,6 +115,11 @@ export const coachApi = {
   getMessages: (convId) => apiFetch(`/coach/conversations/${convId}/messages`),
   getWeeklySummary: () => apiFetch("/coach/weekly-summary"),
   getHabitSuggestions: (goals) => apiFetch("/coach/habit-suggestions", { method: "POST", body: { goals } }),
+  // BYOK — API Key management
+  saveApiKey: (provider, apiKey) => apiFetch("/coach/api-keys", { method: "POST", body: { provider, api_key: apiKey } }),
+  listApiKeys: () => apiFetch("/coach/api-keys"),
+  deleteApiKey: (provider) => apiFetch(`/coach/api-keys/${provider}`, { method: "DELETE" }),
+  setProviderPreference: (provider) => apiFetch("/coach/provider-preference", { method: "PUT", body: { preferred_ai_provider: provider } }),
 };
 
 // ─── Analytics API ───

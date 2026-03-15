@@ -19,6 +19,7 @@ passlib[bcrypt]==1.7.4
 # AI / LLM
 anthropic==0.42.0
 openai==1.59.0
+google-generativeai>=0.8.0
 
 # ML
 scikit-learn==1.6.1

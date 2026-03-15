@@ -1,18 +1,140 @@
 """
-HabitFlow AI — AI Coach Service
-Uses Claude API for personalized habit coaching conversations.
+HabitFlow AI — AI Coach Service (Multi-Provider)
+Supports:
+  1. Google Gemini (free tier — no cost)
+  2. Anthropic Claude via BYOK (user's own API key)
+  3. Anthropic Claude via app key (Pro subscribers)
 """
 
-import anthropic
+import logging
 from datetime import date, timedelta
 from app.config import get_settings
 from app.database import get_supabase_admin
 
+logger = logging.getLogger(__name__)
 
-def _get_client() -> anthropic.Anthropic:
+
+# ============================================================
+# PROVIDER ABSTRACTION
+# ============================================================
+
+def _call_gemini(system_prompt: str, messages: list[dict], max_tokens: int, model: str) -> dict:
+    """Call Google Gemini API (free tier)."""
+    import google.generativeai as genai
+
     settings = get_settings()
-    return anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    genai.configure(api_key=settings.google_gemini_api_key)
 
+    gmodel = genai.GenerativeModel(
+        model_name=model,
+        system_instruction=system_prompt,
+    )
+
+    # Convert messages to Gemini format
+    gemini_history = []
+    for m in messages[:-1]:  # all but last message
+        role = "user" if m["role"] == "user" else "model"
+        gemini_history.append({"role": role, "parts": [m["content"]]})
+
+    chat = gmodel.start_chat(history=gemini_history)
+    last_msg = messages[-1]["content"] if messages else ""
+
+    response = chat.send_message(
+        last_msg,
+        generation_config=genai.GenerationConfig(max_output_tokens=max_tokens),
+    )
+
+    # Estimate token usage (Gemini provides usage metadata)
+    usage = getattr(response, "usage_metadata", None)
+    tokens_used = 0
+    if usage:
+        tokens_used = (getattr(usage, "prompt_token_count", 0) or 0) + (getattr(usage, "candidates_token_count", 0) or 0)
+
+    return {
+        "content": response.text,
+        "tokens_used": tokens_used,
+        "model": model,
+        "provider": "gemini",
+    }
+
+
+def _call_anthropic(system_prompt: str, messages: list[dict], max_tokens: int, model: str, api_key: str) -> dict:
+    """Call Anthropic Claude API (BYOK or app key)."""
+    import anthropic
+
+    client = anthropic.Anthropic(api_key=api_key)
+    response = client.messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        system=system_prompt,
+        messages=messages,
+    )
+
+    tokens_used = response.usage.input_tokens + response.usage.output_tokens
+
+    return {
+        "content": response.content[0].text,
+        "tokens_used": tokens_used,
+        "model": model,
+        "provider": "anthropic",
+    }
+
+
+def _resolve_provider(user_id: str, profile: dict) -> dict:
+    """
+    Determine which AI provider to use based on user tier and settings.
+    Returns: {"provider": str, "model": str, "api_key": str | None}
+    """
+    settings = get_settings()
+    admin = get_supabase_admin()
+    tier = profile.get("subscription_tier", "free")
+    preferred = profile.get("preferred_ai_provider", "gemini")
+
+    # Pro/lifetime users → app's Claude key
+    if tier in ("pro", "lifetime"):
+        return {
+            "provider": "anthropic",
+            "model": settings.ai_model,
+            "api_key": settings.anthropic_api_key,
+        }
+
+    # Check if user has their own API key (BYOK)
+    if preferred == "anthropic":
+        key_result = (
+            admin.table("user_api_keys")
+            .select("api_key_encrypted, is_valid")
+            .eq("user_id", user_id)
+            .eq("provider", "anthropic")
+            .eq("is_valid", True)
+            .limit(1)
+            .execute()
+        )
+        if key_result.data:
+            return {
+                "provider": "anthropic",
+                "model": settings.ai_model,
+                "api_key": key_result.data[0]["api_key_encrypted"],
+            }
+
+    # Default: free Gemini
+    return {
+        "provider": "gemini",
+        "model": settings.free_ai_model,
+        "api_key": None,
+    }
+
+
+def _call_provider(provider_info: dict, system_prompt: str, messages: list[dict], max_tokens: int) -> dict:
+    """Route to the correct provider."""
+    if provider_info["provider"] == "gemini":
+        return _call_gemini(system_prompt, messages, max_tokens, provider_info["model"])
+    else:
+        return _call_anthropic(system_prompt, messages, max_tokens, provider_info["model"], provider_info["api_key"])
+
+
+# ============================================================
+# SYSTEM PROMPT BUILDER
+# ============================================================
 
 async def build_system_prompt(user_id: str) -> str:
     """Build a context-rich system prompt with user's habit data."""
@@ -97,15 +219,32 @@ COACHING GUIDELINES:
 10. End with one specific, actionable suggestion when appropriate."""
 
 
+# ============================================================
+# CHAT
+# ============================================================
+
 async def chat(
     user_id: str,
     conversation_id: str | None,
     user_message: str,
+    profile: dict = None,
 ) -> dict:
     """Send a message to the AI coach and get a response."""
     settings = get_settings()
     admin = get_supabase_admin()
-    client = _get_client()
+
+    # Load profile if not passed
+    if profile is None:
+        profile = (
+            admin.table("profiles")
+            .select("subscription_tier, preferred_ai_provider")
+            .eq("id", user_id)
+            .single()
+            .execute()
+        ).data or {}
+
+    # Resolve provider
+    provider_info = _resolve_provider(user_id, profile)
 
     # Create or fetch conversation
     if conversation_id is None:
@@ -115,7 +254,7 @@ async def chat(
             "title": user_message[:50],
         }).execute()
         conversation_id = conv_result.data[0]["id"]
-    
+
     # Save user message
     admin.table("coach_messages").insert({
         "conversation_id": conversation_id,
@@ -129,7 +268,7 @@ async def chat(
         .select("role, content")
         .eq("conversation_id", conversation_id)
         .order("created_at")
-        .limit(20)  # Last 20 messages for context
+        .limit(20)
         .execute()
     )
     messages = [
@@ -141,47 +280,66 @@ async def chat(
     # Build system prompt with user context
     system_prompt = await build_system_prompt(user_id)
 
-    # Call Claude API
-    response = client.messages.create(
-        model=settings.ai_model,
-        max_tokens=settings.ai_max_tokens,
-        system=system_prompt,
-        messages=messages,
-    )
-
-    assistant_content = response.content[0].text
-    tokens_used = response.usage.input_tokens + response.usage.output_tokens
+    # Call the resolved provider
+    try:
+        result = _call_provider(provider_info, system_prompt, messages, settings.ai_max_tokens)
+    except Exception as e:
+        logger.error(f"AI provider error ({provider_info['provider']}): {e}")
+        # If BYOK key fails, mark it invalid and fallback to Gemini
+        if provider_info["provider"] == "anthropic" and provider_info.get("api_key") != settings.anthropic_api_key:
+            logger.warning(f"BYOK key failed for user {user_id}, falling back to Gemini")
+            admin.table("user_api_keys").update({"is_valid": False}).eq("user_id", user_id).eq("provider", "anthropic").execute()
+            fallback = {"provider": "gemini", "model": settings.free_ai_model, "api_key": None}
+            result = _call_provider(fallback, system_prompt, messages, settings.ai_max_tokens)
+        else:
+            raise
 
     # Save assistant message
     msg_result = admin.table("coach_messages").insert({
         "conversation_id": conversation_id,
         "role": "assistant",
-        "content": assistant_content,
-        "tokens_used": tokens_used,
-        "model": settings.ai_model,
+        "content": result["content"],
+        "tokens_used": result["tokens_used"],
+        "model": result["model"],
     }).execute()
 
     # Atomically increment conversation token count
-    admin.rpc("increment_tokens", {
-        "p_conv_id": conversation_id,
-        "p_tokens": tokens_used,
-    }).execute()
+    if result["tokens_used"] > 0:
+        admin.rpc("increment_tokens", {
+            "p_conv_id": conversation_id,
+            "p_tokens": result["tokens_used"],
+        }).execute()
 
     return {
         "conversation_id": conversation_id,
         "message_id": msg_result.data[0]["id"],
         "role": "assistant",
-        "content": assistant_content,
-        "tokens_used": tokens_used,
+        "content": result["content"],
+        "tokens_used": result["tokens_used"],
+        "provider": result["provider"],
         "created_at": msg_result.data[0].get("created_at"),
     }
 
 
-async def generate_weekly_summary(user_id: str) -> dict:
+# ============================================================
+# WEEKLY SUMMARY
+# ============================================================
+
+async def generate_weekly_summary(user_id: str, profile: dict = None) -> dict:
     """Generate an AI-powered weekly summary with insights."""
     settings = get_settings()
     admin = get_supabase_admin()
-    client = _get_client()
+
+    if profile is None:
+        profile = (
+            admin.table("profiles")
+            .select("subscription_tier, preferred_ai_provider")
+            .eq("id", user_id)
+            .single()
+            .execute()
+        ).data or {}
+
+    provider_info = _resolve_provider(user_id, profile)
 
     today = date.today()
     week_start = today - timedelta(days=7)
@@ -240,14 +398,11 @@ Best habit: {best_habit}. Needs work: {worst_habit}.
 Average mood: {avg_mood}/5. Average energy: {avg_energy}/5.
 Habits tracked: {len(habits)}."""
 
-    response = client.messages.create(
-        model=settings.ai_model,
-        max_tokens=500,
-        system="You are a concise habit coach. Write a 2-3 paragraph weekly review that celebrates wins, identifies patterns, and gives 2-3 specific suggestions. Be warm and encouraging.",
-        messages=[{"role": "user", "content": f"Here's my week:\n{data_summary}"}],
-    )
+    system = "You are a concise habit coach. Write a 2-3 paragraph weekly review that celebrates wins, identifies patterns, and gives 2-3 specific suggestions. Be warm and encouraging."
+    messages = [{"role": "user", "content": f"Here's my week:\n{data_summary}"}]
 
-    ai_summary = response.content[0].text
+    result = _call_provider(provider_info, system, messages, 500)
+    ai_summary = result["content"]
 
     return {
         "week_start": week_start.isoformat(),
@@ -258,7 +413,38 @@ Habits tracked: {len(habits)}."""
         "worst_habit": worst_habit,
         "avg_mood": avg_mood,
         "avg_energy": avg_energy,
-        "mood_habit_correlations": [],  # TODO: compute via analytics engine
+        "mood_habit_correlations": [],
         "ai_summary": ai_summary,
-        "suggestions": [],  # Extracted from ai_summary
+        "suggestions": [],
     }
+
+
+# ============================================================
+# VALIDATE API KEY
+# ============================================================
+
+def validate_api_key(provider: str, api_key: str) -> bool:
+    """Test if a user-provided API key is valid."""
+    try:
+        if provider == "anthropic":
+            import anthropic
+            client = anthropic.Anthropic(api_key=api_key)
+            client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=10,
+                messages=[{"role": "user", "content": "hi"}],
+            )
+            return True
+        elif provider == "openai":
+            import openai
+            client = openai.OpenAI(api_key=api_key)
+            client.chat.completions.create(
+                model="gpt-4o-mini",
+                max_tokens=10,
+                messages=[{"role": "user", "content": "hi"}],
+            )
+            return True
+        return False
+    except Exception as e:
+        logger.warning(f"API key validation failed for {provider}: {e}")
+        return False

@@ -26,8 +26,11 @@ class Settings(BaseSettings):
     # AI / LLM
     anthropic_api_key: str = ""
     openai_api_key: str = ""
+    google_gemini_api_key: str = ""
     ai_model: str = "claude-sonnet-4-20250514"
     ai_max_tokens: int = 1024
+    free_ai_model: str = "gemini-2.0-flash"
+    free_ai_provider: str = "gemini"  # "gemini" or "anthropic"
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"

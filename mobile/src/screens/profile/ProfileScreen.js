@@ -12,7 +12,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { COLORS } from "../../constants";
-import { userApi, gamificationApi, habitsApi, auth } from "../../services/api";
+import { userApi, gamificationApi, habitsApi, coachApi, auth } from "../../services/api";
 
 export default function ProfileScreen() {
   const [profile, setProfile] = useState(null);
@@ -23,6 +23,8 @@ export default function ProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [badgeFilter, setBadgeFilter] = useState("all");
   const [darkMode, setDarkMode] = useState(true);
+  const [apiKeys, setApiKeys] = useState([]);
+  const [preferredProvider, setPreferredProvider] = useState("gemini");
 
   useEffect(() => { loadData(); }, []);
 
@@ -38,6 +40,12 @@ export default function ProfileScreen() {
       setLevelInfo(level);
       setBadges(badgeList || []);
       setActiveHabitCount(Array.isArray(habits) ? habits.length : 0);
+      setPreferredProvider(prof?.preferred_ai_provider || "gemini");
+      // Load saved API keys
+      try {
+        const keys = await coachApi.listApiKeys();
+        setApiKeys(keys || []);
+      } catch { /* BYOK endpoints may not be deployed yet */ }
     } catch (err) {
       console.error("Profile load error:", err);
       Alert.alert("Error", "Failed to load profile data. Pull to refresh.");
@@ -62,6 +70,65 @@ export default function ProfileScreen() {
         },
       },
     ]);
+  };
+
+  const handleAddApiKey = () => {
+    Alert.prompt(
+      "Connect Anthropic API Key",
+      "Paste your Anthropic API key (starts with sk-ant-). This enables Claude as your AI coach.\n\nGet a key at console.anthropic.com",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Save",
+          onPress: async (key) => {
+            if (!key || !key.startsWith("sk-ant-")) {
+              Alert.alert("Invalid Key", "Anthropic API keys start with sk-ant-");
+              return;
+            }
+            try {
+              await coachApi.saveApiKey("anthropic", key);
+              const keys = await coachApi.listApiKeys();
+              setApiKeys(keys || []);
+              setPreferredProvider("anthropic");
+              Alert.alert("Connected!", "Claude is now your AI coach.");
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (err) {
+              Alert.alert("Invalid Key", err.message || "Could not validate the API key.");
+            }
+          },
+        },
+      ],
+      "plain-text",
+    );
+  };
+
+  const handleRemoveApiKey = (provider) => {
+    Alert.alert("Remove API Key", `Remove your ${provider} key? You'll switch back to the free AI model.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove", style: "destructive",
+        onPress: async () => {
+          try {
+            await coachApi.deleteApiKey(provider);
+            setApiKeys(apiKeys.filter((k) => k.provider !== provider));
+            setPreferredProvider("gemini");
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          } catch (err) {
+            Alert.alert("Error", err.message);
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleSwitchProvider = async (provider) => {
+    try {
+      await coachApi.setProviderPreference(provider);
+      setPreferredProvider(provider);
+      Haptics.selectionAsync();
+    } catch (err) {
+      Alert.alert("Error", err.message);
+    }
   };
 
   if (loading) {
@@ -203,6 +270,63 @@ export default function ProfileScreen() {
         ))}
       </View>
 
+      {/* ─── AI Coach Provider ─── */}
+      <Text style={[styles.sectionTitle, { marginTop: 24, marginBottom: 10 }]}>AI Coach</Text>
+      <View style={styles.settingsCard}>
+        {/* Provider toggle */}
+        <View style={styles.providerRow}>
+          <TouchableOpacity
+            onPress={() => handleSwitchProvider("gemini")}
+            style={[styles.providerBtn, preferredProvider === "gemini" && styles.providerBtnActive]}
+          >
+            <Text style={styles.providerIcon}>{"✦"}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.providerName, preferredProvider === "gemini" && styles.providerNameActive]}>Gemini Flash</Text>
+              <Text style={styles.providerMeta}>Free & unlimited</Text>
+            </View>
+            {preferredProvider === "gemini" && <Text style={styles.providerCheck}>{"✓"}</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              const hasKey = apiKeys.some((k) => k.provider === "anthropic" && k.is_valid);
+              if (hasKey) handleSwitchProvider("anthropic");
+              else handleAddApiKey();
+            }}
+            style={[styles.providerBtn, preferredProvider === "anthropic" && styles.providerBtnActive]}
+          >
+            <Text style={styles.providerIcon}>{"◈"}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.providerName, preferredProvider === "anthropic" && styles.providerNameActive]}>Claude (BYOK)</Text>
+              <Text style={styles.providerMeta}>
+                {apiKeys.some((k) => k.provider === "anthropic" && k.is_valid) ? "Key connected" : "Bring your own key"}
+              </Text>
+            </View>
+            {preferredProvider === "anthropic" && <Text style={styles.providerCheck}>{"✓"}</Text>}
+          </TouchableOpacity>
+        </View>
+        {/* Manage key */}
+        {apiKeys.some((k) => k.provider === "anthropic") ? (
+          <TouchableOpacity
+            onPress={() => handleRemoveApiKey("anthropic")}
+            style={[styles.settingRow, styles.settingBorder]}
+          >
+            <View style={styles.settingLeft}>
+              <Text style={{ fontSize: 16 }}>{"🔑"}</Text>
+              <Text style={[styles.settingLabel, { color: "#FF6B8A" }]}>Remove Anthropic Key</Text>
+            </View>
+            <Text style={styles.settingChevron}>{"›"}</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity onPress={handleAddApiKey} style={[styles.settingRow, styles.settingBorder]}>
+            <View style={styles.settingLeft}>
+              <Text style={{ fontSize: 16 }}>{"🔑"}</Text>
+              <Text style={[styles.settingLabel, { color: COLORS.accent }]}>Connect Anthropic Key</Text>
+            </View>
+            <Text style={styles.settingChevron}>{"›"}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
       {/* ─── Settings ─── */}
       <Text style={[styles.sectionTitle, { marginTop: 24, marginBottom: 10 }]}>Settings</Text>
       <View style={styles.settingsCard}>
@@ -319,6 +443,20 @@ const styles = StyleSheet.create({
   settingLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
   settingLabel: { fontSize: 14, fontWeight: "500", color: COLORS.text },
   settingChevron: { fontSize: 16, color: COLORS.dim },
+
+  // AI Provider
+  providerRow: { padding: 12, gap: 8 },
+  providerBtn: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    padding: 12, borderRadius: 12, backgroundColor: COLORS.surface,
+    borderWidth: 1, borderColor: COLORS.border,
+  },
+  providerBtnActive: { borderColor: COLORS.accent, backgroundColor: `${COLORS.accent}14` },
+  providerIcon: { fontSize: 20, width: 28, textAlign: "center" },
+  providerName: { fontSize: 13, fontWeight: "700", color: COLORS.sub },
+  providerNameActive: { color: COLORS.accent },
+  providerMeta: { fontSize: 10, color: COLORS.dim, marginTop: 1 },
+  providerCheck: { fontSize: 16, fontWeight: "800", color: COLORS.accent },
 
   // App info
   appInfo: { alignItems: "center", marginTop: 20, paddingBottom: 20 },

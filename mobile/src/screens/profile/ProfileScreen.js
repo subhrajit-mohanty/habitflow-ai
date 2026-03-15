@@ -72,25 +72,44 @@ export default function ProfileScreen() {
     ]);
   };
 
-  const handleAddApiKey = () => {
+  const handleAddApiKey = (provider = "anthropic") => {
+    const config = {
+      anthropic: {
+        title: "Connect Anthropic API Key",
+        message: "Paste your Anthropic API key (starts with sk-ant-).\n\nGet a key at console.anthropic.com",
+        validate: (key) => key && key.startsWith("sk-ant-"),
+        errorMsg: "Anthropic API keys start with sk-ant-",
+        successMsg: "Claude is now your AI coach.",
+      },
+      openrouter: {
+        title: "Connect OpenRouter API Key",
+        message: "Paste your OpenRouter API key (starts with sk-or-).\n\nGet a free key at openrouter.ai/keys\nOne key gives access to 100+ AI models!",
+        validate: (key) => key && key.startsWith("sk-or-"),
+        errorMsg: "OpenRouter API keys start with sk-or-",
+        successMsg: "OpenRouter connected! You now have access to 100+ AI models.",
+      },
+    };
+    const c = config[provider];
+    if (!c) return;
+
     Alert.prompt(
-      "Connect Anthropic API Key",
-      "Paste your Anthropic API key (starts with sk-ant-). This enables Claude as your AI coach.\n\nGet a key at console.anthropic.com",
+      c.title,
+      c.message,
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Save",
           onPress: async (key) => {
-            if (!key || !key.startsWith("sk-ant-")) {
-              Alert.alert("Invalid Key", "Anthropic API keys start with sk-ant-");
+            if (!c.validate(key)) {
+              Alert.alert("Invalid Key", c.errorMsg);
               return;
             }
             try {
-              await coachApi.saveApiKey("anthropic", key);
+              await coachApi.saveApiKey(provider, key);
               const keys = await coachApi.listApiKeys();
               setApiKeys(keys || []);
-              setPreferredProvider("anthropic");
-              Alert.alert("Connected!", "Claude is now your AI coach.");
+              setPreferredProvider(provider);
+              Alert.alert("Connected!", c.successMsg);
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             } catch (err) {
               Alert.alert("Invalid Key", err.message || "Could not validate the API key.");
@@ -281,15 +300,32 @@ export default function ProfileScreen() {
             <Text style={styles.providerIcon}>{"✦"}</Text>
             <View style={{ flex: 1 }}>
               <Text style={[styles.providerName, preferredProvider === "gemini" && styles.providerNameActive]}>Gemini Flash</Text>
-              <Text style={styles.providerMeta}>Free & unlimited</Text>
+              <Text style={styles.providerMeta}>Free — powered by app</Text>
             </View>
             {preferredProvider === "gemini" && <Text style={styles.providerCheck}>{"✓"}</Text>}
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => {
+              const hasKey = apiKeys.some((k) => k.provider === "openrouter" && k.is_valid);
+              if (hasKey) handleSwitchProvider("openrouter");
+              else handleAddApiKey("openrouter");
+            }}
+            style={[styles.providerBtn, preferredProvider === "openrouter" && styles.providerBtnActive]}
+          >
+            <Text style={styles.providerIcon}>{"⚡"}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.providerName, preferredProvider === "openrouter" && styles.providerNameActive]}>OpenRouter</Text>
+              <Text style={styles.providerMeta}>
+                {apiKeys.some((k) => k.provider === "openrouter" && k.is_valid) ? "Key connected · 100+ models" : "100+ models · Bring your key"}
+              </Text>
+            </View>
+            {preferredProvider === "openrouter" && <Text style={styles.providerCheck}>{"✓"}</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
               const hasKey = apiKeys.some((k) => k.provider === "anthropic" && k.is_valid);
               if (hasKey) handleSwitchProvider("anthropic");
-              else handleAddApiKey();
+              else handleAddApiKey("anthropic");
             }}
             style={[styles.providerBtn, preferredProvider === "anthropic" && styles.providerBtnActive]}
           >
@@ -303,7 +339,19 @@ export default function ProfileScreen() {
             {preferredProvider === "anthropic" && <Text style={styles.providerCheck}>{"✓"}</Text>}
           </TouchableOpacity>
         </View>
-        {/* Manage key */}
+        {/* Manage keys */}
+        {apiKeys.some((k) => k.provider === "openrouter") && (
+          <TouchableOpacity
+            onPress={() => handleRemoveApiKey("openrouter")}
+            style={[styles.settingRow, styles.settingBorder]}
+          >
+            <View style={styles.settingLeft}>
+              <Text style={{ fontSize: 16 }}>{"🔑"}</Text>
+              <Text style={[styles.settingLabel, { color: "#FF6B8A" }]}>Remove OpenRouter Key</Text>
+            </View>
+            <Text style={styles.settingChevron}>{"›"}</Text>
+          </TouchableOpacity>
+        )}
         {apiKeys.some((k) => k.provider === "anthropic") ? (
           <TouchableOpacity
             onPress={() => handleRemoveApiKey("anthropic")}
@@ -316,10 +364,19 @@ export default function ProfileScreen() {
             <Text style={styles.settingChevron}>{"›"}</Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity onPress={handleAddApiKey} style={[styles.settingRow, styles.settingBorder]}>
+          <TouchableOpacity onPress={() => handleAddApiKey("anthropic")} style={[styles.settingRow, styles.settingBorder]}>
             <View style={styles.settingLeft}>
               <Text style={{ fontSize: 16 }}>{"🔑"}</Text>
               <Text style={[styles.settingLabel, { color: COLORS.accent }]}>Connect Anthropic Key</Text>
+            </View>
+            <Text style={styles.settingChevron}>{"›"}</Text>
+          </TouchableOpacity>
+        )}
+        {!apiKeys.some((k) => k.provider === "openrouter") && (
+          <TouchableOpacity onPress={() => handleAddApiKey("openrouter")} style={[styles.settingRow, styles.settingBorder]}>
+            <View style={styles.settingLeft}>
+              <Text style={{ fontSize: 16 }}>{"⚡"}</Text>
+              <Text style={[styles.settingLabel, { color: COLORS.accent }]}>Connect OpenRouter Key</Text>
             </View>
             <Text style={styles.settingChevron}>{"›"}</Text>
           </TouchableOpacity>

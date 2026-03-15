@@ -170,6 +170,20 @@ export default function CoachChatScreen() {
       setMessages((prev) => [...prev, aiMsg]);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
+      const isQuotaError = err.message?.includes("quota exceeded") || err.message?.includes("429");
+      if (isQuotaError) {
+        Alert.alert(
+          "Free AI Limit Reached",
+          "The free AI quota has been exceeded. Add your own API key via OpenRouter to continue chatting with 100+ AI models (many are free!).",
+          [
+            { text: "Later", style: "cancel" },
+            { text: "Add Key", onPress: () => {
+              // Navigate to profile — user can add key there
+              Alert.alert("Go to Profile", "Head to Profile → AI Coach to add your OpenRouter key.");
+            }},
+          ]
+        );
+      }
       setError(err.message);
     } finally {
       setIsTyping(false);

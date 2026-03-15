@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     free_ai_model: str = "gemini-2.0-flash"
     free_ai_provider: str = "gemini"  # "gemini" or "anthropic"
 
+    # OpenRouter (BYOK fallback — users add their own key)
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_default_model: str = "google/gemini-2.0-flash-exp:free"
+
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 

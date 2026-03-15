@@ -119,7 +119,7 @@ export const coachApi = {
   saveApiKey: (provider, apiKey) => apiFetch("/coach/api-keys", { method: "POST", body: { provider, api_key: apiKey } }),
   listApiKeys: () => apiFetch("/coach/api-keys"),
   deleteApiKey: (provider) => apiFetch(`/coach/api-keys/${provider}`, { method: "DELETE" }),
-  setProviderPreference: (provider) => apiFetch("/coach/provider-preference", { method: "PUT", body: { preferred_ai_provider: provider } }),
+  setProviderPreference: (provider, model = null) => apiFetch("/coach/provider-preference", { method: "PUT", body: { preferred_ai_provider: provider, preferred_model: model } }),
   getDailyInsight: () => apiFetch("/coach/daily-insight"),
 };
 

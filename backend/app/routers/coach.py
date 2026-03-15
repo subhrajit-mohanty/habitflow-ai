@@ -16,6 +16,7 @@ from app.services.ai_coach import (
     chat as ai_chat,
     generate_weekly_summary,
     validate_api_key,
+    QuotaExceededError,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,7 +35,8 @@ class APIKeyResponse(BaseModel):
     created_at: str | None = None
 
 class ProviderPreferenceRequest(BaseModel):
-    preferred_ai_provider: str  # "gemini" or "anthropic"
+    preferred_ai_provider: str  # "gemini", "openrouter", or "anthropic"
+    preferred_model: str | None = None  # OpenRouter model ID (e.g. "google/gemini-2.0-flash-exp:free")
 
 
 # ============================================================
@@ -60,6 +62,8 @@ async def chat_with_coach(
             profile=profile,
         )
         return result
+    except QuotaExceededError as e:
+        raise HTTPException(429, str(e))
     except Exception as e:
         logger.error(f"AI Coach error: {e}")
         raise HTTPException(500, "AI Coach is temporarily unavailable. Please try again.")
@@ -203,8 +207,8 @@ async def save_api_key(
     user: dict = Depends(get_current_user),
 ):
     """Save a user-provided API key (BYOK). Validates it first."""
-    if body.provider not in ("anthropic", "openai"):
-        raise HTTPException(400, "Provider must be 'anthropic' or 'openai'")
+    if body.provider not in ("anthropic", "openai", "openrouter"):
+        raise HTTPException(400, "Provider must be 'anthropic', 'openai', or 'openrouter'")
 
     # Validate the key
     is_valid = validate_api_key(body.provider, body.api_key)
@@ -226,10 +230,10 @@ async def save_api_key(
         .execute()
     )
 
-    # Auto-set preferred provider to anthropic if they just added an Anthropic key
-    if body.provider == "anthropic":
+    # Auto-set preferred provider when adding a BYOK key
+    if body.provider in ("anthropic", "openrouter"):
         admin.table("profiles").update({
-            "preferred_ai_provider": "anthropic"
+            "preferred_ai_provider": body.provider
         }).eq("id", user["id"]).execute()
 
     row = result.data[0] if result.data else {}
@@ -286,30 +290,33 @@ async def set_provider_preference(
     user: dict = Depends(get_current_user),
 ):
     """Set preferred AI provider (gemini or anthropic)."""
-    if body.preferred_ai_provider not in ("gemini", "anthropic"):
-        raise HTTPException(400, "Must be 'gemini' or 'anthropic'")
+    if body.preferred_ai_provider not in ("gemini", "anthropic", "openrouter"):
+        raise HTTPException(400, "Must be 'gemini', 'anthropic', or 'openrouter'")
 
     admin = get_supabase_admin()
 
-    # If switching to anthropic, verify they have a valid BYOK key
-    if body.preferred_ai_provider == "anthropic":
+    # If switching to a BYOK provider, verify they have a valid key
+    if body.preferred_ai_provider in ("anthropic", "openrouter"):
         key = (
             admin.table("user_api_keys")
             .select("id")
             .eq("user_id", user["id"])
-            .eq("provider", "anthropic")
+            .eq("provider", body.preferred_ai_provider)
             .eq("is_valid", True)
             .limit(1)
             .execute()
         )
         if not key.data:
-            raise HTTPException(400, "Add your Anthropic API key first to use Claude.")
+            provider_name = "Anthropic" if body.preferred_ai_provider == "anthropic" else "OpenRouter"
+            raise HTTPException(400, f"Add your {provider_name} API key first.")
 
-    admin.table("profiles").update({
-        "preferred_ai_provider": body.preferred_ai_provider,
-    }).eq("id", user["id"]).execute()
+    update_data = {"preferred_ai_provider": body.preferred_ai_provider}
+    if body.preferred_model:
+        update_data["preferred_model"] = body.preferred_model
 
-    return {"preferred_ai_provider": body.preferred_ai_provider}
+    admin.table("profiles").update(update_data).eq("id", user["id"]).execute()
+
+    return {"preferred_ai_provider": body.preferred_ai_provider, "preferred_model": body.preferred_model}
 
 
 # ============================================================

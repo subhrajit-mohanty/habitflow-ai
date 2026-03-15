@@ -14,6 +14,11 @@ from app.database import get_supabase_admin
 logger = logging.getLogger(__name__)
 
 
+class QuotaExceededError(Exception):
+    """Raised when the free Gemini quota is exhausted."""
+    pass
+
+
 # ============================================================
 # PROVIDER ABSTRACTION
 # ============================================================
@@ -58,6 +63,35 @@ def _call_gemini(system_prompt: str, messages: list[dict], max_tokens: int, mode
     }
 
 
+def _call_openrouter(system_prompt: str, messages: list[dict], max_tokens: int, model: str, api_key: str) -> dict:
+    """Call OpenRouter API (OpenAI-compatible format, 100+ models)."""
+    import openai
+
+    settings = get_settings()
+    client = openai.OpenAI(
+        api_key=api_key,
+        base_url=settings.openrouter_base_url,
+    )
+
+    or_messages = [{"role": "system", "content": system_prompt}] + messages
+    response = client.chat.completions.create(
+        model=model,
+        max_tokens=max_tokens,
+        messages=or_messages,
+    )
+
+    tokens_used = 0
+    if response.usage:
+        tokens_used = (response.usage.prompt_tokens or 0) + (response.usage.completion_tokens or 0)
+
+    return {
+        "content": response.choices[0].message.content,
+        "tokens_used": tokens_used,
+        "model": model,
+        "provider": "openrouter",
+    }
+
+
 def _call_anthropic(system_prompt: str, messages: list[dict], max_tokens: int, model: str, api_key: str) -> dict:
     """Call Anthropic Claude API (BYOK or app key)."""
     import anthropic
@@ -84,30 +118,42 @@ def _resolve_provider(user_id: str, profile: dict) -> dict:
     """
     Determine which AI provider to use based on user preference.
     Returns: {"provider": str, "model": str, "api_key": str | None}
+
+    Priority:
+      1. User's preferred BYOK provider (openrouter or anthropic) if they have a valid key
+      2. Default: free Gemini via app owner's key
     """
     settings = get_settings()
     admin = get_supabase_admin()
     preferred = profile.get("preferred_ai_provider", "gemini")
 
-    # Check if user has their own API key (BYOK) and prefers Claude
-    if preferred == "anthropic":
+    # If user prefers a BYOK provider, check for a valid key
+    if preferred in ("openrouter", "anthropic"):
         key_result = (
             admin.table("user_api_keys")
             .select("api_key_encrypted, is_valid")
             .eq("user_id", user_id)
-            .eq("provider", "anthropic")
+            .eq("provider", preferred)
             .eq("is_valid", True)
             .limit(1)
             .execute()
         )
         if key_result.data:
-            return {
-                "provider": "anthropic",
-                "model": settings.ai_model,
-                "api_key": key_result.data[0]["api_key_encrypted"],
-            }
+            if preferred == "openrouter":
+                model = profile.get("preferred_model") or settings.openrouter_default_model
+                return {
+                    "provider": "openrouter",
+                    "model": model,
+                    "api_key": key_result.data[0]["api_key_encrypted"],
+                }
+            else:
+                return {
+                    "provider": "anthropic",
+                    "model": settings.ai_model,
+                    "api_key": key_result.data[0]["api_key_encrypted"],
+                }
 
-    # Default: free Gemini (unlimited for all users)
+    # Default: free Gemini (app owner's key)
     return {
         "provider": "gemini",
         "model": settings.free_ai_model,
@@ -117,8 +163,11 @@ def _resolve_provider(user_id: str, profile: dict) -> dict:
 
 def _call_provider(provider_info: dict, system_prompt: str, messages: list[dict], max_tokens: int) -> dict:
     """Route to the correct provider."""
-    if provider_info["provider"] == "gemini":
+    provider = provider_info["provider"]
+    if provider == "gemini":
         return _call_gemini(system_prompt, messages, max_tokens, provider_info["model"])
+    elif provider == "openrouter":
+        return _call_openrouter(system_prompt, messages, max_tokens, provider_info["model"], provider_info["api_key"])
     else:
         return _call_anthropic(system_prompt, messages, max_tokens, provider_info["model"], provider_info["api_key"])
 
@@ -275,13 +324,30 @@ async def chat(
     try:
         result = _call_provider(provider_info, system_prompt, messages, settings.ai_max_tokens)
     except Exception as e:
+        error_str = str(e).lower()
         logger.error(f"AI provider error ({provider_info['provider']}): {e}")
-        # If BYOK key fails, mark it invalid and fallback to Gemini
-        if provider_info["provider"] == "anthropic" and provider_info.get("api_key") != settings.anthropic_api_key:
+
+        # Gemini quota exceeded — tell user to add their own key
+        if provider_info["provider"] == "gemini" and (
+            "429" in str(e) or "resource_exhausted" in error_str or "quota" in error_str
+        ):
+            raise QuotaExceededError(
+                "Free AI quota exceeded. Add your own API key in Profile → AI Coach to continue chatting."
+            )
+
+        # BYOK key fails — mark invalid and fallback to Gemini
+        if provider_info["provider"] in ("anthropic", "openrouter"):
             logger.warning(f"BYOK key failed for user {user_id}, falling back to Gemini")
-            admin.table("user_api_keys").update({"is_valid": False}).eq("user_id", user_id).eq("provider", "anthropic").execute()
+            admin.table("user_api_keys").update({"is_valid": False}).eq("user_id", user_id).eq("provider", provider_info["provider"]).execute()
             fallback = {"provider": "gemini", "model": settings.free_ai_model, "api_key": None}
-            result = _call_provider(fallback, system_prompt, messages, settings.ai_max_tokens)
+            try:
+                result = _call_provider(fallback, system_prompt, messages, settings.ai_max_tokens)
+            except Exception as fallback_err:
+                if "429" in str(fallback_err) or "quota" in str(fallback_err).lower():
+                    raise QuotaExceededError(
+                        "Free AI quota exceeded. Add your own API key in Profile → AI Coach to continue chatting."
+                    )
+                raise
         else:
             raise
 
@@ -422,6 +488,19 @@ def validate_api_key(provider: str, api_key: str) -> bool:
             client = anthropic.Anthropic(api_key=api_key)
             client.messages.create(
                 model="claude-haiku-4-5-20251001",
+                max_tokens=10,
+                messages=[{"role": "user", "content": "hi"}],
+            )
+            return True
+        elif provider == "openrouter":
+            import openai
+            settings = get_settings()
+            client = openai.OpenAI(
+                api_key=api_key,
+                base_url=settings.openrouter_base_url,
+            )
+            client.chat.completions.create(
+                model=settings.openrouter_default_model,
                 max_tokens=10,
                 messages=[{"role": "user", "content": "hi"}],
             )

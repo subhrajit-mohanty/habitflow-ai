@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Build
+dist/
+build/
+*.egg-info/
+*.ipa
+*.apk
+*.aab
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Expo
+.expo/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Firebase
+firebase-credentials.json
+google-play-service-account.json
+
+# Logs
+*.log
+npm-debug.log*

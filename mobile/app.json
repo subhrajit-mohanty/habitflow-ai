@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "HabitFlow AI",
+    "slug": "habitflow-ai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "habitflow",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#08070D"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.habitflow.ai",
+      "infoPlist": {
+        "NSCameraUsageDescription": "HabitFlow uses your camera for photo check-in verification.",
+        "NSPhotoLibraryUsageDescription": "HabitFlow needs access to your photos for habit verification."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#08070D"
+      },
+      "package": "com.habitflow.ai",
+      "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE"]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-notifications",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow HabitFlow to access your photos for habit check-in verification."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "your-eas-project-id"
+      }
+    }
+  }
+}

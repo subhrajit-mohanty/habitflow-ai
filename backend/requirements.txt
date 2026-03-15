@@ -1,0 +1,45 @@
+# HabitFlow AI — Backend Dependencies
+# Python 3.11+
+
+# Core
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+python-multipart==0.0.20
+
+# Database — Supabase
+supabase==2.11.0
+postgrest==0.18.0
+
+# Auth
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# AI / LLM
+anthropic==0.42.0
+openai==1.59.0
+
+# ML
+scikit-learn==1.6.1
+numpy==2.2.1
+pandas==2.2.3
+
+# Storage & Caching
+redis==5.2.1
+
+# Push Notifications
+firebase-admin==6.6.0
+
+# Image Processing (photo verification)
+Pillow==11.1.0
+
+# Utilities
+httpx==0.28.1
+python-dateutil==2.9.0
+orjson==3.10.14
+
+# Dev
+pytest==8.3.4
+pytest-asyncio==0.25.0
+ruff==0.8.6

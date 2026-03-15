@@ -1,0 +1,118 @@
+# .github/workflows/mobile.yml
+# HabitFlow AI — Mobile App CI/CD Pipeline (Expo EAS)
+
+name: Mobile CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths: ['habitflow-expo/**']
+  pull_request:
+    branches: [main]
+    paths: ['habitflow-expo/**']
+
+defaults:
+  run:
+    working-directory: habitflow-expo
+
+jobs:
+  # ──── Lint & Type Check ────
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: habitflow-expo/package-lock.json
+      - run: npm ci
+      - run: npx eslint src/ --ext .js,.jsx
+
+  # ──── EAS Build (Preview) — on PRs ────
+  build-preview:
+    runs-on: ubuntu-latest
+    needs: lint
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: npm ci
+      - name: Build Preview (iOS + Android)
+        run: |
+          eas build --platform all --profile preview --non-interactive
+
+  # ──── EAS Build (Production) — on main push ────
+  build-production:
+    runs-on: ubuntu-latest
+    needs: lint
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: npm ci
+
+      # Build iOS
+      - name: Build iOS Production
+        run: eas build --platform ios --profile production --non-interactive
+
+      # Build Android
+      - name: Build Android Production
+        run: eas build --platform android --profile production --non-interactive
+
+  # ──── Submit to App Stores ────
+  submit:
+    runs-on: ubuntu-latest
+    needs: build-production
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: npm ci
+
+      # Submit iOS to App Store Connect (TestFlight)
+      - name: Submit to App Store
+        run: eas submit --platform ios --profile production --non-interactive
+        env:
+          EXPO_APPLE_ID: ${{ secrets.APPLE_ID }}
+          EXPO_APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+
+      # Submit Android to Play Console (Internal track)
+      - name: Submit to Play Store
+        run: eas submit --platform android --profile production --non-interactive
+
+  # ──── OTA Update (for JS-only changes) ────
+  ota-update:
+    runs-on: ubuntu-latest
+    needs: lint
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: npm ci
+      - name: Publish OTA Update
+        run: eas update --branch production --message "${{ github.event.head_commit.message }}"

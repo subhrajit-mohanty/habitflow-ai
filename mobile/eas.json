@@ -1,0 +1,59 @@
+{
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://localhost:8000/v1",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://your-dev-project.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_KEY": "your-dev-anon-key"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "ios": {
+        "buildConfiguration": "Release"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api-staging.habitflow.ai/v1",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://your-staging-project.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_KEY": "your-staging-anon-key"
+      }
+    },
+    "production": {
+      "ios": {
+        "buildConfiguration": "Release",
+        "autoIncrement": true
+      },
+      "android": {
+        "buildType": "app-bundle",
+        "autoIncrement": true
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.habitflow.ai/v1",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://your-prod-project.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_KEY": "your-prod-anon-key"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "your-apple-id@email.com",
+        "ascAppId": "your-app-store-connect-app-id",
+        "appleTeamId": "YOUR_TEAM_ID"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./google-play-service-account.json",
+        "track": "internal"
+      }
+    }
+  }
+}

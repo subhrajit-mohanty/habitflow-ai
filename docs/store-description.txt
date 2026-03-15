@@ -1,0 +1,84 @@
+# HabitFlow AI — Store Description
+# Copy-paste into App Store Connect and Google Play Console
+
+## App Name
+HabitFlow AI
+
+## Subtitle (iOS only, 30 chars)
+Smart Habits, Real Results
+
+## Short Description (80 chars)
+Build tiny habits that stick — powered by AI that learns when you'll succeed.
+
+## Keywords (iOS, 100 chars max)
+habits,habit tracker,micro habits,AI coach,streak,mindfulness,productivity,self improvement,wellness
+
+## Category
+Health & Fitness
+
+## Full Description (copy below)
+----
+
+HabitFlow AI is your personal habit coach that uses artificial intelligence to help you build lasting micro-habits.
+
+Unlike generic reminder apps, HabitFlow learns YOUR patterns — analyzing when you're most productive, energized, and likely to complete each habit. The result? Smart notifications at the perfect moment, not just another alarm you'll ignore.
+
+KEY FEATURES:
+
+AI Smart Scheduling — Our ML engine analyzes your daily patterns to find the optimal 2-minute window for each habit. The more you use HabitFlow, the smarter it gets.
+
+Conversational AI Coach — Chat with your personal habit coach anytime. Get weekly reviews, habit stacking suggestions, and motivation based on your actual data — not generic advice.
+
+Streak Engine — Gamified streaks with XP, levels, and 13 unlockable badges. Earn bonus XP for long streaks and celebrate milestones.
+
+Mood & Energy Tracking — Log how you feel throughout the day and discover which habits actually boost your wellbeing. See real correlations between your habits and your mood.
+
+Photo Check-ins — Verify habits with your camera for accountability. Our vision AI confirms completion so you stay honest.
+
+Buddy System — Pair with friends as accountability partners. Send nudges, share streaks, and compete in community challenges.
+
+Beautiful Analytics — Completion trends, weekly heatmaps, per-habit breakdowns, and mood-habit correlations. Understand your patterns at a glance.
+
+START WITH JUST 2 MINUTES:
+
+Choose from 10 science-backed micro-habits: meditation, hydration, stretching, reading, gratitude journaling, deep breathing, and more. Each takes just 2 minutes. The AI coach helps you stack habits and find the perfect routine.
+
+FREE PLAN:
+• 3 active habits
+• Basic streaks and reminders
+• Daily check-ins
+• Community challenges
+
+PRO PLAN ($4.99/month or $39.99 lifetime):
+• Unlimited habits
+• AI Coach (unlimited conversations)
+• Smart scheduling with ML optimization
+• Advanced analytics and mood correlations
+• Photo check-ins with verification
+• Priority support
+
+Built for people who want real results, not just another app they'll delete in a week. Start your 2-minute habit journey today.
+
+----
+
+## What's New (for updates)
+- AI Coach powered by Claude — personalized habit advice
+- Smart scheduling learns your optimal times
+- Mood-habit correlation insights (Pro)
+- Buddy nudge system for accountability
+- 13 unlockable achievement badges
+
+## Privacy Policy URL
+https://habitflow.ai/privacy
+
+## Support URL
+https://habitflow.ai/support
+
+## Marketing URL
+https://habitflow.ai
+
+## App Review Notes (iOS)
+Demo account for testing:
+Email: test@habitflow.ai
+Password: TestAccount123!
+This account has pre-populated habits with active streaks and mood data for a complete review experience. The AI Coach feature requires network access to function.
